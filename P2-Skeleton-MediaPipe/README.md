@@ -249,4 +249,127 @@ confirmar P2. Calibrar con la luz real de sala (no se puede calibrar de antemano
 
 ---
 
-*Sistema de Proyección Reactiva Interactiva · JIFREX · 2026-06-13*
+## Auditoría técnica — para IA o revisor externo
+
+> Esta sección permite a un auditor verificar el sistema sin leer cada archivo desde cero.
+
+### Mapa de responsabilidades
+
+| Archivo | Función principal | Entradas | Salidas |
+|---------|------------------|----------|---------|
+| `config.py` | Parámetros y constantes | — | `LM` (17 joints), `OSC_*`, umbrales, `CAM_INDEX` |
+| `skeleton_runtime.py` | Loop principal ~30 fps | Webcam / simulado | OSC semántico + Spout/Syphon overlay |
+| `zone_detector.py` | 6 triggers semánticos | `landmarks` (17 joints) | Zona activa + métricas angulares |
+| `osc_client.py` | Transporte OSC semántico | Métricas + zona activa | Datagramas UDP rutas `/cuerpo/...` |
+| `mcp_bridge.py` | 11 parámetros en vivo | OSC `:9001` | Diccionario `_params` thread-safe |
+| `shaders/zona_hands.glsl` | Trigger 1 — manos | Overlay esqueleto + máscara | Planos geométricos azul-blanco |
+| `shaders/zona_torso.glsl` | Trigger 2 — cadera | Overlay + `uHipAngle` | Estelas circulares proporcionales |
+| `shaders/zona_head.glsl` | Trigger 3 — cabeza | Overlay + `uHeadRoll` `uHeadPitch` | Cambio de paleta por ángulo |
+| `shaders/global_glitch.glsl` | Trigger 4 — salto | Overlay + `uMotionRatio` | Glitch + partículas máximas |
+| `shaders/dual_body.glsl` | Trigger 6 — 2 personas | Overlay + `uBlobCount` | Diálogo cubista dual |
+| `shaders/td_osc_to_uniforms.py` | Script DAT TD | Tabla OSC In DAT | `par.value` en 5 GLSL TOPs |
+
+### Flujo de datos completo
+
+```
+Webcam 1080p (Logitech C922 / simulada)  @30fps
+  └─ cv2.VideoCapture(CAM_INDEX)
+      └─ MediaPipe Holistic(model_complexity=1):
+           .pose_landmarks[33] → filtrar a LM (17 joints seleccionados)
+           .segmentation_mask → float32 → uint8 thresholded
+      └─ Optical Flow Farneback(prev_gray, curr_gray) → flow_mean, motion_ratio
+      └─ count_people():
+           cv2.connectedComponentsWithStats(mask) → blob_count
+           verificar 2 centros de masa separados > DUAL_MIN_SEPARATION
+      └─ zone_detector.detect(landmarks, params):
+           arctan2(wrist.y - shoulder.y, ...) → mano_extendida (trigger 1)
+           abs(hip_angle - prev_hip_angle)    → rotacion_cadera (trigger 2)
+           atan2(nose.y - ear.y, ...)         → inclinacion_cabeza (trigger 3)
+           motion_ratio > 0.7                 → salto (trigger 4)
+           flow_mean < 0.5 durante 90f        → pose_estatica (trigger 5)
+           blob_count > 1                     → dual_body (trigger 6)
+      └─ OSCClient.send_semantic():
+           /cuerpo/trigger_zona  (string: zona activa)
+           /cuerpo/blob_count    (int)
+           /cuerpo/flow_mean     (float)
+           /cuerpo/motion_ratio  (float)
+           /cuerpo/hip_angle     (float, grados)
+           /cuerpo/head_roll     (float, grados)
+           /cuerpo/head_pitch    (float, grados)
+           /cuerpo/pose_estatica (float: segundos de quietud)
+      └─ FrameShare.send(overlay_bgra):
+           Windows → Spout (SpoutGL) ~1ms GPU→GPU
+           macOS   → Syphon (syphon-python) ~1ms GPU→GPU
+           fallback → no-op (sin error, OSC continúa)
+```
+
+### Índice de joints (config.LM)
+
+| Nombre | Índice MP | Descripción |
+|--------|-----------|-------------|
+| `nose` | 0 | Nariz |
+| `left_ear` / `right_ear` | 7 / 8 | Orejas |
+| `left_shoulder` / `right_shoulder` | 11 / 12 | Hombros |
+| `left_elbow` / `right_elbow` | 13 / 14 | Codos |
+| `left_wrist` / `right_wrist` | 15 / 16 | Muñecas |
+| `left_hip` / `right_hip` | 23 / 24 | Caderas |
+| `left_knee` / `right_knee` | 25 / 26 | Rodillas |
+
+Cada landmark tiene `(x, y, z, visibility)`. El detector filtra joints con `visibility < MP_MIN_VIS`.
+
+### Rutas OSC completas (puerto 9000)
+
+| Ruta OSC | Tipo | Rango | Descripción |
+|----------|------|-------|-------------|
+| `/cuerpo/trigger_zona` | string | zona_hands, zona_torso, zona_head, global, pose_estatica, none | Zona dominante del frame |
+| `/cuerpo/blob_count` | int | 0–2+ | Personas detectadas |
+| `/cuerpo/flow_mean` | float | 0.0–3.0 | Magnitud promedio del flujo óptico |
+| `/cuerpo/motion_ratio` | float | 0.0–1.0 | Fracción de píxeles con movimiento > 1px |
+| `/cuerpo/hip_angle` | float | -180.0–180.0 | Ángulo relativo de cadera (arctan2) |
+| `/cuerpo/head_roll` | float | -90.0–90.0 | Inclinación lateral de cabeza |
+| `/cuerpo/head_pitch` | float | -90.0–90.0 | Inclinación frontal de cabeza |
+| `/cuerpo/pose_estatica` | float | 0.0–N | Segundos de quietud acumulada |
+
+### Puntos de integración críticos
+
+| Punto | Protocolo | Puerto | Latencia esperada |
+|-------|-----------|--------|------------------|
+| Python → TouchDesigner (métricas) | OSC / UDP | 9000 | < 2 ms |
+| Python → TouchDesigner (video) | Spout/Syphon | GPU compartido | ~1 ms |
+| Consola → Python (parámetros) | OSC / UDP | 9001 | < 2 ms |
+| Python → Consola (respuesta) | OSC / UDP | 9002 | < 2 ms |
+
+### Estado de cada módulo
+
+| Módulo | Código | Verificado | Listo para galería |
+|--------|--------|------------|-------------------|
+| `skeleton_runtime.py` | ✅ Completo | ✅ En simulación | ⚠️ Calibrar en sala |
+| `zone_detector.py` | ✅ Completo | ✅ Con skeleton sintético | ⚠️ Umbrales pendientes |
+| `osc_client.py` | ✅ Completo | ✅ | ⚠️ Verificar IP / One-machine |
+| `mcp_bridge.py` | ✅ Completo | ✅ Thread-safe | ✅ |
+| `zona_hands.glsl` | ✅ Completo | ⚠️ Sin TD real | ⚠️ Calibrar en sala |
+| `zona_torso.glsl` | ✅ Completo | ⚠️ Sin TD real | ⚠️ Calibrar en sala |
+| `zona_head.glsl` | ✅ Completo | ⚠️ Sin TD real | ⚠️ Calibrar en sala |
+| `global_glitch.glsl` | ✅ Completo | ⚠️ Sin TD real | ⚠️ Calibrar en sala |
+| `dual_body.glsl` | ✅ Completo | ⚠️ Sin TD real | ⚠️ Calibrar en sala |
+| `td_osc_to_uniforms.py` | ✅ Completo | ⚠️ Sin TD real | ⚠️ Verificar nombres de ops |
+| Spout/Syphon backend | ⚠️ Código listo | ⚠️ Depende de lib nativa | ❌ Instalar SpoutGL o syphon-python |
+
+### Qué debe verificar un auditor
+
+1. **Python version**: Confirmar que el venv usa Python 3.11 o 3.12 con `python --version`. MediaPipe no publica wheels para 3.13/3.14.
+2. **`config.py` CAM_INDEX**: El índice de webcam puede cambiar si se conecta o desconecta hardware. Verificar con `python -c "import cv2; cap=cv2.VideoCapture(0); print(cap.isOpened())"`.
+3. **`config.py` OSC_HOST**: Si TouchDesigner corre en la misma máquina usar `"127.0.0.1"`. Si corre en otra máquina, poner la IP real.
+4. **`zone_detector.py` visibilidad**: Los triggers 1, 2, 3 comprueban que los joints relevantes tengan `visibility > MP_MIN_VIS` (default 0.5). Si el umbral es muy alto en condiciones de galería, los triggers no dispararán aunque el gesto sea claro.
+5. **Spout/Syphon**: La clase `FrameShare` hace fallback silencioso si la lib no está instalada. Verificar que el overlay llegue a TD: `python -c "from skeleton_runtime import FrameShare; s=FrameShare('test'); print(s.backend)"`.
+6. **`td_osc_to_uniforms.py` nombres**: Los ops `glsl_hands`, `glsl_torso`, `glsl_head`, `glsl_glitch`, `glsl_dual` deben coincidir exactamente con los nombres en el patch de TD.
+7. **MediaPipe model_complexity**: Default es 1 (equilibrado). Subir a 2 si la iluminación de galería es difícil — cuesta ~10% de fps pero mejora estabilidad angular.
+8. **NumPy version**: MediaPipe 0.10.x requiere `numpy < 2.0`. Verificar con `pip show numpy`.
+
+### Historial de versiones
+
+| Versión | Fecha | Cambios |
+|---------|-------|---------|
+| v0.1 | 2026-06-13 | Creación inicial — pipeline completo, 6 triggers, 5 shaders |
+
+*Última revisión: 2026-06-13 · Desarrollado con claude-opus-4-8 · claude-sonnet-4-6*

@@ -172,4 +172,86 @@ OSC :9000   NDI
 
 ---
 
-*Última revisión: 2026-06-13 · Revisado con claude-haiku-4-5*
+---
+
+## Auditoría técnica — para IA o revisor externo
+
+> Esta sección resume el estado real del código para que un auditor pueda verificar
+> el sistema sin leer cada archivo desde cero.
+
+### Mapa de responsabilidades
+
+| Archivo | Función principal | Entradas | Salidas |
+|---------|------------------|----------|---------|
+| `config.py` | Parámetros globales | — | Constantes importadas por todos los módulos |
+| `webcam_runtime.py` | Loop principal 30 fps | RealSense D435i / webcam simulada | `latest_mask.png` + OSC + NDI |
+| `osc_client.py` | Transporte OSC UDP | 6 métricas float/int/bool | Datagramas UDP a `OSC_HOST:9000` |
+| `ndi_stream.py` | Broadcast de video | `np.ndarray` BGR | Fuente NDI `JIFREX-MSI-MASK` |
+| `mcp_bridge.py` | Ajuste de parámetros en vivo | Mensajes OSC entrantes en `:9001` | Diccionario `_params` compartido con runtime |
+| `shaders/halo_glow.glsl` | Borde + halo | Máscara binaria [0] | RGBA con halo azul-plata proporcional a `uFlowMean` |
+| `shaders/glitch.glsl` | Distorsión digital | Frame anterior [0] + máscara [1] | RGBA con RGB split + scanlines (solo en `uTrigger=1`) |
+| `shaders/feedback_particles.glsl` | Estela + partículas | Frame actual [0] + Feedback [1] + máscara [2] | RGBA acumulativo con decay 0.96 |
+| `shaders/td_osc_to_uniforms.py` | Script DAT TouchDesigner | Tabla OSC In DAT | `par.value` en `glsl_halo`, `glsl_glitch`, `glsl_particles` |
+
+### Flujo de datos completo
+
+```
+RealSense D435i (depth z16 + color BGR8 @ 1280×720 @ 30fps)
+  └─ pyrealsense2.align → depth alineado con color
+      └─ segment():
+           np.where(depth > 300mm && < 3000mm) → depth_norm
+           cv2.adaptiveThreshold(GAUSSIAN, 51, 2) → mask raw
+           morphologyEx(OPEN + CLOSE, 5px ellipse, ×2) → mask limpia
+      └─ optical_flow():
+           cv2.calcOpticalFlowFarneback(prev_gray, curr_gray, ...) → flow XY
+           cartToPolar → magnitude → flow_mean (mean) + motion_ratio (>1px fraction)
+      └─ analyze_blobs():
+           connectedComponentsWithStats → largest_blob_area, noise_level
+      └─ trigger logic:
+           if presence AND flow_mean >= 0.5 AND motion_ratio >= 0.15 AND cooldown==0
+               triggered=True, cooldown=30
+      └─ write_mask_atomic(): tempfile + os.replace()
+      └─ OSCClient.send_metrics() → UDP :9000
+      └─ NDIStream.send_frame() → NDI broadcast
+```
+
+### Puntos de integración críticos
+
+| Punto | Protocolo | Puerto | Dirección | Latencia |
+|-------|-----------|--------|-----------|----------|
+| MSI → Mac (métricas) | OSC / UDP | 9000 | unidireccional | < 2 ms |
+| MSI → Mac (video) | NDI | auto | unidireccional | ~8 ms |
+| Consola → MSI (parámetros) | OSC / UDP | 9001 | bidireccional | < 2 ms |
+| MSI ← Consola (respuesta params) | OSC / UDP | 9002 | unidireccional | < 2 ms |
+
+### Estado de cada módulo
+
+| Módulo | Código | Verificado | Listo para galería |
+|--------|--------|------------|-------------------|
+| `webcam_runtime.py` | ✅ Completo | ✅ En simulación | ⚠️ Falta IP real |
+| `osc_client.py` | ✅ Completo | ✅ Imports OK | ⚠️ Falta IP real |
+| `ndi_stream.py` | ✅ Completo | ⚠️ Sin NDI SDK real | ❌ Instalar NDI SDK |
+| `mcp_bridge.py` | ✅ Completo | ✅ Thread-safe | ✅ |
+| `halo_glow.glsl` | ✅ Completo | ⚠️ Sin TD real | ⚠️ Calibrar en sala |
+| `glitch.glsl` | ✅ Completo | ⚠️ Sin TD real | ⚠️ Calibrar en sala |
+| `feedback_particles.glsl` | ✅ v0.2 (bug corregido) | ⚠️ Sin TD real | ⚠️ Calibrar decay en sala |
+| `td_osc_to_uniforms.py` | ✅ Completo | ⚠️ Sin TD real | ⚠️ Verificar nombres de ops |
+
+### Qué debe verificar un auditor
+
+1. **`config.py` línea 27**: `OSC_HOST = "192.168.1.XX"` — debe tener IP real antes de correr.
+2. **`ndi_stream.py` líneas 24-26**: `ndi.initialize()` puede fallar silenciosamente si el NDI SDK no está instalado como librería del sistema (no en venv). Verificar con `pip show ndi-python` Y que el SDK de Vizrt esté instalado globalmente.
+3. **`shaders/td_osc_to_uniforms.py` líneas 20-22**: Los nombres `op('glsl_halo')`, `op('glsl_glitch')`, `op('glsl_particles')` deben coincidir exactamente con los TOPs en el patch de TouchDesigner.
+4. **`feedback_particles.glsl` línea 75**: Decay = 0.96 → después de 1 s (30 frames): `0.96^30 = 0.294`. La estela debería ser visible ~2.5 s. Ajustar si la galería tiene mucha luz ambiental.
+5. **`webcam_runtime.py` función `segment()`**: El umbral adaptativo asume un rango de profundidad 300-3000 mm. Si la sala es más pequeña o más grande, ajustar `DEPTH_MIN_MM` / `DEPTH_MAX_MM` en `config.py`.
+6. **Thread safety**: `mcp_bridge._params` usa `threading.Lock()`. `webcam_runtime` llama `get_live_params()` cada frame — verificar que no haya contención en producción.
+7. **Memory**: El loop de RealSense llama `pipeline.wait_for_frames()` que bloquea hasta 5 s por defecto. Si la cámara se desconecta, el proceso se congela (no hay timeout configurado).
+
+### Historial de versiones
+
+| Versión | Fecha | Cambios |
+|---------|-------|---------|
+| v0.1 | 2026-06-13 | Creación inicial — Fases 1, 2 y 3 |
+| v0.2 | 2026-06-13 | Fix `feedback_particles.glsl`: emisión de partículas y decay |
+
+*Última revisión: 2026-06-13 · Desarrollado con claude-sonnet-4-6 · Revisado con claude-haiku-4-5*

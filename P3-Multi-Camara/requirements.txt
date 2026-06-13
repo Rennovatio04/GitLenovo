@@ -1,0 +1,20 @@
+# P3 — Multi-Cámara: 3 Perspectivas Simultáneas
+# Aún Sorprendo · JIFREX
+#
+# IMPORTANTE: Crear el venv con Python 3.11 o 3.12
+#   python3.12 -m venv venv
+#   source venv/bin/activate       (macOS)
+#   .\venv\Scripts\Activate.ps1   (Windows — solo para desarrollo, no para galería)
+#
+# pip install -r requirements.txt
+# Y adicionalmente en macOS:
+#   pip install syphon-python
+# Y DepthAI (OAK-D Pro W):
+#   pip install depthai              # desde Luxonis
+
+mediapipe>=0.10.0,<0.11.0
+numpy<2.0
+opencv-python>=4.8.0
+python-osc>=1.8.0
+# depthai>=2.24.0     # descomentar después de instalar el SDK de Luxonis
+# syphon-python>=0.3.0  # macOS only
