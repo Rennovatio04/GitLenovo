@@ -1,0 +1,23 @@
+# P4 — DeepLabv3 + CoreML · Referencia Antimodular / Lozano-Hemmer
+# Aún Sorprendo · JIFREX
+#
+# IMPORTANTE: Python 3.11 o 3.12
+#   python3.12 -m venv venv
+#   source venv/bin/activate   (macOS)
+#
+# pip install -r requirements.txt
+# Y adicionalmente en macOS:
+#   pip install syphon-python
+# Para la conversión CoreML (solo una vez):
+#   pip install tensorflow tensorflow-hub coremltools pillow
+
+numpy<2.0
+opencv-python>=4.8.0
+python-osc>=1.8.0
+# Conversión + runtime CoreML (macOS):
+# coremltools>=7.0
+# tensorflow>=2.13.0
+# tensorflow-hub>=0.15.0
+# pillow>=10.0.0
+# Runtime Syphon (macOS):
+# syphon-python>=0.3.0
