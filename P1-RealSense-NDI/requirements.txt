@@ -1,0 +1,6 @@
+pyrealsense2>=2.58.0
+opencv-python>=4.9.0
+numpy>=2.0.0
+python-osc>=1.10.0
+ndi-python>=6.3.0
+Pillow>=10.0.0

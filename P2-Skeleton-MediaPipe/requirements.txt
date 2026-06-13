@@ -1,0 +1,15 @@
+# P2 — Skeleton Semántico MediaPipe Holistic · JIFREX
+# IMPORTANTE: MediaPipe publica wheels solo para Python 3.9–3.12.
+# Crear el venv con uno de esos intérpretes (recomendado 3.11 o 3.12).
+
+mediapipe>=0.10.14
+opencv-python>=4.9.0
+numpy>=1.26.0,<2.0.0      # MediaPipe 0.10.x aún no soporta NumPy 2.x
+python-osc>=1.10.0
+Pillow>=10.0.0
+
+# ── GPU share (instalar solo el de tu plataforma) ─────────────────────────────
+# Windows (MSI) — Spout:
+#   pip install SpoutGL
+# macOS (Mac)  — Syphon:
+#   pip install syphon-python
