@@ -7,7 +7,7 @@ Galería Universitaria Fernando Cano · UAEMEx / FUNIBER
 
 ---
 
-## Estado actual: BETA — v0.1
+## Estado actual: BETA — v0.2
 
 | Fase | Estado | Detalle |
 |------|--------|---------|
@@ -366,10 +366,41 @@ Cada landmark tiene `(x, y, z, visibility)`. El detector filtra joints con `visi
 7. **MediaPipe model_complexity**: Default es 1 (equilibrado). Subir a 2 si la iluminación de galería es difícil — cuesta ~10% de fps pero mejora estabilidad angular.
 8. **NumPy version**: MediaPipe 0.10.x requiere `numpy < 2.0`. Verificar con `pip show numpy`.
 
+### Auditoría y mejoras — 2026-06-14
+
+**Hallazgos**
+
+- El runtime ya incorporaba el MCP bridge embebido, pero el modo "terminal A +
+  terminal B" podía provocar conflicto de puerto si el bridge se ejecutaba dos
+  veces.
+- La lógica semántica y el flujo principal están bien separados; el mayor riesgo
+  real sigue siendo la calibración de iluminación en sala, no el pipeline base.
+
+**Mejoras aplicadas**
+
+- `mcp_bridge.py` ahora maneja `MCP_LISTEN_PORT` ocupado y reutiliza el bridge ya
+  activo en vez de abortar el arranque.
+- README actualizado con el resultado de la auditoría y con foco en el riesgo real
+  de despliegue: iluminación, no arquitectura.
+
+**Trabajo auditado**
+
+- Captura webcam → MediaPipe Holistic → `zone_detector` → OSC semántico → share GPU.
+- Consistencia entre documentación operativa y comportamiento real del bridge MCP.
+
+**Listo para próxima auditoría**
+
+- Validar iluminación real de sala con webcam y MediaPipe.
+- Confirmar que el operador puede arrancar runtime y bridge sin conflicto de puerto.
+- Verificar instalación del backend correcto de share (`SpoutGL` o `syphon-python`).
+- Repetir revisión sobre estabilidad larga y comportamiento de los 6 triggers con
+  visitantes reales.
+
 ### Historial de versiones
 
 | Versión | Fecha | Cambios |
 |---------|-------|---------|
 | v0.1 | 2026-06-13 | Creación inicial — pipeline completo, 6 triggers, 5 shaders |
+| v0.2 | 2026-06-14 | Auditoría operativa: MCP embebido tolerante a doble arranque y README ajustado |
 
-*Última revisión: 2026-06-13 · Desarrollado con claude-opus-4-8 · claude-sonnet-4-6*
+*Última revisión: 2026-06-14 · Desarrollado con claude-opus-4-8 · claude-sonnet-4-6*

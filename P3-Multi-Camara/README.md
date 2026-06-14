@@ -9,7 +9,7 @@ Galería Universitaria Fernando Cano · UAEMEx / FUNIBER
 
 ---
 
-## Estado actual: BETA — v0.1
+## Estado actual: BETA — v0.2
 
 | Fase | Estado | Detalle |
 |------|--------|---------|
@@ -333,11 +333,47 @@ TouchDesigner:
 | Trigger principal | 1 (presencia + flow) | 6 semánticos | Triple coincidencia |
 | VRAM estimado | ~1.5 GB (MSI) | ~1.0 GB | ~2.5 GB (M3 Max) |
 
+### Auditoría y mejoras — 2026-06-14
+
+**Hallazgos**
+
+- `CameraThread` usaba un atributo `_stop` que colisiona con un método interno de
+  `threading.Thread`; eso podía romper `join()` al cerrar el runtime.
+- `SyncManager` documentaba reutilización del último frame válido, pero en la
+  práctica siempre devolvía el frame más reciente aunque estuviera fuera de ventana.
+- El MCP bridge existía, pero `multicam_runtime.py` no consumía parámetros vivos
+  para sincronización ni umbrales de composición.
+
+**Mejoras aplicadas**
+
+- Renombrado el flag de parada a `_stop_event` para cerrar los hilos sin colisión
+  con internals de Python.
+- `SyncManager` ahora reutiliza el último frame validado cuando una cámara llega
+  tarde y acepta una ventana de sincronización viva.
+- `camera_thread.py` ya aplica `mask_threshold` en vivo desde MCP.
+- `multicam_runtime.py` ahora arranca el bridge embebido de forma segura y consume
+  `sync_window_ms` y `triple_threshold` en tiempo real.
+
+**Trabajo auditado**
+
+- Captura OAK-D/C922 → MediaPipe ×3 → sincronización → composición → OSC/Syphon.
+- Cierre de hilos, tolerancia a desincronización y cableado real del MCP bridge.
+
+**Listo para próxima auditoría**
+
+- Ejecutar prueba con 3 cámaras reales y confirmar que `sync_window_ms` reacciona
+  en vivo desde MCP.
+- Verificar que el cierre del runtime termina los 3 hilos sin bloquear `join()`.
+- Medir `sync_ratio` y validar reutilización del último frame cuando una cámara se
+  sale de ventana.
+- Confirmar hardware Mac M3 Max, puertos TB4 dedicados y backends reales de cámara/share.
+
 ### Historial de versiones
 
 | Versión | Fecha | Cambios |
 |---------|-------|---------|
 | v0.1 | 2026-06-13 | Creación inicial — Fases 1, 2, 3 completas |
+| v0.2 | 2026-06-14 | Auditoría técnica: cierre de hilos corregido, sincronización validada y MCP vivo conectado |
 
-*Última revisión: 2026-06-13 · Desarrollado con claude-sonnet-4-6*  
-*Sistema de Proyección Reactiva Interactiva · JIFREX · 2026-06-13*
+*Última revisión: 2026-06-14 · Desarrollado con claude-sonnet-4-6*  
+*Sistema de Proyección Reactiva Interactiva · JIFREX · 2026-06-14*

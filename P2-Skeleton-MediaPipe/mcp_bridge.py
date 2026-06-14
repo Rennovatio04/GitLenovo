@@ -74,7 +74,11 @@ def start(blocking: bool = True):
     dispatcher.map("/mcp/set/*",      _handle_set)
     dispatcher.map("/mcp/get/params", _handle_get)
 
-    server = ThreadingOSCUDPServer(("0.0.0.0", config.MCP_LISTEN_PORT), dispatcher)
+    try:
+        server = ThreadingOSCUDPServer(("0.0.0.0", config.MCP_LISTEN_PORT), dispatcher)
+    except OSError as exc:
+        print(f"[MCP] Puerto {config.MCP_LISTEN_PORT} ocupado ({exc}) — usando bridge existente.")
+        return None
     print(f"[MCP] Bridge P2 activo en puerto {config.MCP_LISTEN_PORT}")
 
     if blocking:

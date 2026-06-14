@@ -22,50 +22,62 @@ import config
 class SyncManager:
 
     def __init__(self, thread_a: CameraThread, thread_b: CameraThread, thread_c: CameraThread):
-        self._threads    = (thread_a, thread_b, thread_c)
-        self._prev       = [None, None, None]   # últimos frames validados por cámara
-        self._in_sync_streak = 0                # frames consecutivos dentro de ventana
-        self._out_of_sync    = 0                # frames fuera de ventana (para logging)
+        self._threads = (thread_a, thread_b, thread_c)
+        self._validated = [None, None, None]    # últimos frames aceptados por cámara
+        self._in_sync = 0
+        self._out_of_sync = 0
 
-    def get_sync_triplet(self) -> "tuple[CameraResult, CameraResult, CameraResult] | None":
+    def get_sync_triplet(self, sync_window_ms: int | None = None) -> "tuple[CameraResult, CameraResult, CameraResult] | None":
         """
         Devuelve triplete (a, b, c) o None si aún no hay datos de todas las cámaras.
 
-        El triplete siempre refleja el estado más reciente de cada cámara.
-        Los frames fuera de la ventana de sincronización son reemplazados
-        por el último frame validado de esa cámara (para no propagar saltos).
+        Si una cámara llega fuera de la ventana de sincronización, conserva
+        el último frame validado de esa cámara para no propagar saltos.
         """
-        # Obtener frames actuales de los 3 hilos
         current = [t.get_latest() for t in self._threads]
+        for i, frame in enumerate(current):
+            if self._validated[i] is None and frame is not None:
+                self._validated[i] = frame
 
-        # Actualizar cada cámara con el frame más reciente si lo hay
-        for i, f in enumerate(current):
-            if f is not None:
-                self._prev[i] = f
-
-        # No continuar hasta tener al menos 1 frame de cada cámara
-        if any(p is None for p in self._prev):
+        if any(frame is None for frame in self._validated):
             return None
 
-        # Evaluar sincronización del lote actual
-        timestamps = [p.timestamp_ms for p in self._prev]
+        window = config.SYNC_WINDOW_MS if sync_window_ms is None else int(sync_window_ms)
+        reference_ts = max(
+            (frame.timestamp_ms for frame in current if frame is not None),
+            default=max(frame.timestamp_ms for frame in self._validated if frame is not None),
+        )
+
+        selected = []
+        for i, live_frame in enumerate(current):
+            candidate = live_frame if live_frame is not None else self._validated[i]
+            if candidate is not None and reference_ts - candidate.timestamp_ms <= window:
+                selected.append(candidate)
+            else:
+                selected.append(self._validated[i])
+
+        if any(frame is None for frame in selected):
+            return None
+
+        timestamps = [frame.timestamp_ms for frame in selected]
         t_max = max(timestamps)
         t_min = min(timestamps)
         delta = t_max - t_min
 
-        if delta <= config.SYNC_WINDOW_MS:
-            self._in_sync_streak += 1
+        if delta <= window:
+            self._validated = list(selected)
+            self._in_sync += 1
         else:
             self._out_of_sync += 1
 
-        return (self._prev[0], self._prev[1], self._prev[2])
+        return (selected[0], selected[1], selected[2])
 
     def stats(self) -> dict:
         """Estadísticas de sincronización para logging."""
-        total = self._in_sync_streak + self._out_of_sync
-        ratio = self._in_sync_streak / total if total > 0 else 0.0
+        total = self._in_sync + self._out_of_sync
+        ratio = self._in_sync / total if total > 0 else 0.0
         return {
-            "in_sync":     self._in_sync_streak,
+            "in_sync":     self._in_sync,
             "out_of_sync": self._out_of_sync,
             "sync_ratio":  ratio,
         }

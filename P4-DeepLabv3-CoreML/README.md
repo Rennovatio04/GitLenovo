@@ -8,7 +8,7 @@ Galería Universitaria Fernando Cano · UAEMEx / FUNIBER
 
 ---
 
-## Estado actual: BETA — v0.1
+## Estado actual: BETA — v0.2
 
 | Fase | Estado | Detalle |
 |------|--------|---------|
@@ -329,11 +329,42 @@ cv2.VideoCapture(CAM_INDEX) @ 1920×1080 / 60fps
 9. **Morphology kernel 3×3** (vs 5×5 en P1): DeepLabv3 ya produce bordes limpios — un kernel más pequeño preserva el detalle de extremidades. No aumentar salvo que haya mucho ruido de fondo.
 10. **syphon-python**: sin esta lib, la textura no llega a TD. El OSC sí funciona. Verificar con `python3 -c "import syphon; print(syphon.SyphonServer.__module__)"`.
 
+### Auditoría y mejoras — 2026-06-14
+
+**Hallazgos**
+
+- `DeepLabV3.mlpackage` y `latest_mask.png` dependían del directorio desde el que
+  se ejecutara Python, no de la carpeta del proyecto.
+- El runtime leía `get_live_params()`, pero no arrancaba el MCP bridge embebido;
+  en práctica los parámetros vivos solo funcionaban si se levantaba aparte.
+
+**Mejoras aplicadas**
+
+- `deeplab_segmentor.py` ahora resuelve `COREML_MODEL_PATH` relativo a la carpeta
+  del proyecto.
+- `deeplab_runtime.py` ahora escribe la máscara en ruta estable por proyecto y
+  arranca el MCP bridge en modo seguro.
+- `mcp_bridge.py` ya tolera el puerto ocupado para convivir con un bridge externo.
+
+**Trabajo auditado**
+
+- Cámara RGB → DeepLab/CoreML-TF → blobs → trigger → OSC/Syphon.
+- Resolución de rutas, disponibilidad real del bridge MCP y robustez de arranque.
+
+**Listo para próxima auditoría**
+
+- Confirmar que `DeepLabV3.mlpackage` se detecta desde la carpeta del proyecto.
+- Verificar que el bridge MCP embebido queda activo sin exigir arranque manual.
+- Probar `latest_mask.png` y backend CoreML desde una ejecución fuera del directorio
+  del proyecto para validar rutas resueltas.
+- Repetir prueba con hardware Mac M3 Max y medir latencia real de inferencia.
+
 ### Historial de versiones
 
 | Versión | Fecha | Cambios |
 |---------|-------|---------|
 | v0.1 | 2026-06-13 | Creación inicial — pipeline completo, 3 shaders "precise", conversión CoreML |
+| v0.2 | 2026-06-14 | Auditoría operativa: rutas estables por proyecto + MCP embebido utilizable |
 
-*Última revisión: 2026-06-13 · Desarrollado con claude-sonnet-4-6*  
-*Sistema de Proyección Reactiva Interactiva · JIFREX · 2026-06-13*
+*Última revisión: 2026-06-14 · Desarrollado con claude-sonnet-4-6*  
+*Sistema de Proyección Reactiva Interactiva · JIFREX · 2026-06-14*

@@ -29,7 +29,16 @@ from deeplab_segmentor import DeepLabSegmentor
 from blob_analysis      import analyze as blob_analyze
 from osc_client         import P4OSCClient
 from syphon_share       import SyphonShare
-from mcp_bridge         import get_live_params
+from mcp_bridge         import start as start_mcp, get_live_params
+
+
+PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
+
+
+def resolve_project_path(path: str) -> str:
+    if os.path.isabs(path):
+        return path
+    return os.path.join(PROJECT_DIR, path)
 
 
 def optical_flow(prev_gray: np.ndarray, curr_gray: np.ndarray):
@@ -45,10 +54,11 @@ def optical_flow(prev_gray: np.ndarray, curr_gray: np.ndarray):
 
 def write_mask_atomic(mask: np.ndarray, path: str = "latest_mask.png"):
     """Escritura atómica de la máscara — evita frame parcialmente escrito."""
-    fd, tmp = tempfile.mkstemp(suffix=".png", dir=".")
+    out_path = resolve_project_path(path)
+    fd, tmp = tempfile.mkstemp(suffix=".png", dir=PROJECT_DIR)
     os.close(fd)
     cv2.imwrite(tmp, mask)
-    os.replace(tmp, path)
+    os.replace(tmp, out_path)
 
 
 def build_preview(frame_bgr: np.ndarray, mask: np.ndarray,
@@ -84,6 +94,8 @@ def main():
     print("  Aun Sorprendo · JIFREX")
     print(f"  OSC -> {config.OSC_HOST}:{config.OSC_PORT}")
     print("=" * 60)
+
+    start_mcp(blocking=False)
 
     segmentor = DeepLabSegmentor()
     if args.simulate:

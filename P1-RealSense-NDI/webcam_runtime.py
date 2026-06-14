@@ -39,6 +39,15 @@ except ImportError:
     print("[RS] pyrealsense2 no disponible — modo simulación activo.")
 
 
+PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
+
+
+def resolve_project_path(path: str) -> str:
+    if os.path.isabs(path):
+        return path
+    return os.path.join(PROJECT_DIR, path)
+
+
 # ── Cámara ────────────────────────────────────────────────────────────────────
 
 def build_realsense_pipeline():
@@ -127,10 +136,11 @@ def analyze_blobs(mask: np.ndarray) -> tuple:
 
 
 def write_mask_atomic(mask: np.ndarray):
-    tmp_fd, tmp_path = tempfile.mkstemp(suffix=".png", dir=".")
+    mask_path = resolve_project_path(config.MASK_PATH)
+    tmp_fd, tmp_path = tempfile.mkstemp(suffix=".png", dir=PROJECT_DIR)
     os.close(tmp_fd)
     cv2.imwrite(tmp_path, mask)
-    os.replace(tmp_path, config.MASK_PATH)
+    os.replace(tmp_path, mask_path)
 
 
 # ── Loop principal ────────────────────────────────────────────────────────────

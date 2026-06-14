@@ -45,14 +45,23 @@ def _on_get(address: str, *args):
             client.send_message(f"/mcp/params/{k}", v)
 
 
-def start():
+def start(blocking: bool = True):
     d = dispatcher.Dispatcher()
     d.map("/mcp/set/*", _on_set)
     d.map("/mcp/get/params", _on_get)
-    server = osc_server.ThreadingOSCUDPServer(("0.0.0.0", config.MCP_LISTEN_PORT), d)
+    try:
+        server = osc_server.ThreadingOSCUDPServer(("0.0.0.0", config.MCP_LISTEN_PORT), d)
+    except OSError as exc:
+        print(f"[MCP] Puerto {config.MCP_LISTEN_PORT} ocupado ({exc}) — usando bridge existente.")
+        return None
     print(f"[MCP] Escuchando en :{config.MCP_LISTEN_PORT} → "
           f"responde en :{config.MCP_RESPOND_PORT}")
-    server.serve_forever()
+    if blocking:
+        server.serve_forever()
+    else:
+        t = threading.Thread(target=server.serve_forever, daemon=True)
+        t.start()
+        return server
 
 
 if __name__ == "__main__":

@@ -4,7 +4,7 @@ Galería Universitaria Fernando Cano · UAEMEx / FUNIBER
 
 ---
 
-## Estado actual: BETA — v0.2
+## Estado actual: BETA — v0.3
 
 | Fase | Estado | Detalle |
 |------|--------|---------|
@@ -247,11 +247,41 @@ RealSense D435i (depth z16 + color BGR8 @ 1280×720 @ 30fps)
 6. **Thread safety**: `mcp_bridge._params` usa `threading.Lock()`. `webcam_runtime` llama `get_live_params()` cada frame — verificar que no haya contención en producción.
 7. **Memory**: El loop de RealSense llama `pipeline.wait_for_frames()` que bloquea hasta 5 s por defecto. Si la cámara se desconecta, el proceso se congela (no hay timeout configurado).
 
+### Auditoría y mejoras — 2026-06-14
+
+**Hallazgos**
+
+- El runtime escribía `latest_mask.png` relativo al directorio de ejecución, no al
+  directorio del proyecto.
+- `webcam_runtime.py` arranca el MCP bridge embebido, pero si el operador también
+  lanzaba `mcp_bridge.py` manualmente el puerto 9001 podía entrar en conflicto.
+
+**Mejoras aplicadas**
+
+- `webcam_runtime.py` ahora resuelve `MASK_PATH` relativo a la carpeta del proyecto
+  y escribe el archivo temporal en esa misma carpeta.
+- `mcp_bridge.py` ahora detecta el puerto ocupado y degrada con mensaje claro en
+  lugar de romper el arranque.
+
+**Trabajo auditado**
+
+- Pipeline RealSense → segmentación → flow → blobs → OSC → NDI.
+- Robustez operativa de salida a disco y del bridge MCP embebido.
+
+**Listo para próxima auditoría**
+
+- Verificar IP real de `OSC_HOST` y presencia del SDK NDI.
+- Confirmar que `latest_mask.png` se genera dentro de la carpeta del proyecto.
+- Repetir prueba de runtime con bridge embebido y bridge externo para validar la
+  tolerancia a puerto ocupado.
+- Revisar riesgos abiertos: reconexión de red y prueba continua de 8 horas.
+
 ### Historial de versiones
 
 | Versión | Fecha | Cambios |
 |---------|-------|---------|
 | v0.1 | 2026-06-13 | Creación inicial — Fases 1, 2 y 3 |
 | v0.2 | 2026-06-13 | Fix `feedback_particles.glsl`: emisión de partículas y decay |
+| v0.3 | 2026-06-14 | Auditoría operativa: `MASK_PATH` estable por proyecto + MCP tolerante a puerto ocupado |
 
-*Última revisión: 2026-06-13 · Desarrollado con claude-sonnet-4-6 · Revisado con claude-haiku-4-5*
+*Última revisión: 2026-06-14 · Desarrollado con claude-sonnet-4-6 · Revisado con claude-haiku-4-5*

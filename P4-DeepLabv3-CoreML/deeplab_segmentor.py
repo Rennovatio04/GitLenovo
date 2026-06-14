@@ -11,12 +11,22 @@
 # instalados. No hay que cambiar código para pasar de desarrollo a producción.
 # ─────────────────────────────────────────────────────────────────────────────
 
+import os
 import sys
 import time
 import numpy as np
 import cv2
 
 import config
+
+
+PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
+
+
+def resolve_project_path(path: str) -> str:
+    if os.path.isabs(path):
+        return path
+    return os.path.join(PROJECT_DIR, path)
 
 
 class DeepLabSegmentor:
@@ -33,6 +43,7 @@ class DeepLabSegmentor:
         self._model     = None
         self._t_last    = 0.0
         self._input_sz  = config.DEEPLAB_INPUT_SIZE  # 513
+        self._model_path = resolve_project_path(config.COREML_MODEL_PATH)
 
         self._init_backend()
 
@@ -43,15 +54,14 @@ class DeepLabSegmentor:
         if sys.platform == "darwin":
             try:
                 import coremltools as ct
-                import os
-                if os.path.exists(config.COREML_MODEL_PATH):
-                    self._model  = ct.models.MLModel(config.COREML_MODEL_PATH)
+                if os.path.exists(self._model_path):
+                    self._model  = ct.models.MLModel(self._model_path)
                     self.backend = "coreml"
-                    print(f"[DeepLab] Backend: CoreML → {config.COREML_MODEL_PATH}")
+                    print(f"[DeepLab] Backend: CoreML → {self._model_path}")
                     print("[DeepLab] Neural Engine M3 Max — latencia esperada: 15–25 ms/frame")
                     return
                 else:
-                    print(f"[DeepLab] {config.COREML_MODEL_PATH} no encontrado")
+                    print(f"[DeepLab] {self._model_path} no encontrado")
                     print("[DeepLab] Ejecutar: python convert_to_coreml.py")
             except ImportError:
                 print("[DeepLab] coremltools no instalado")

@@ -25,6 +25,7 @@ except ImportError:
     print("[CameraThread] MediaPipe no disponible — usando simulacion")
 
 import config
+from mcp_bridge import get_live_params
 
 
 class CameraResult:
@@ -60,7 +61,7 @@ class CameraThread(threading.Thread):
         self.use_oak     = use_oak
         self._lock       = threading.Lock()
         self._latest: CameraResult | None = None
-        self._stop       = threading.Event()
+        self._stop_event = threading.Event()
         self._prev_gray  = None
         self._mp_holistic = None
 
@@ -69,7 +70,7 @@ class CameraThread(threading.Thread):
             return self._latest
 
     def stop(self):
-        self._stop.set()
+        self._stop_event.set()
 
     # ── MediaPipe ─────────────────────────────────────────────────────────────
 
@@ -88,8 +89,10 @@ class CameraThread(threading.Thread):
     def _segment(self, frame_rgb: np.ndarray, mp_result) -> np.ndarray:
         """Extrae máscara de segmentación limpia de MediaPipe (uint8 0/255)."""
         h, w = frame_rgb.shape[:2]
+        params = get_live_params()
+        threshold = float(params.get("mask_threshold", config.MASK_THRESHOLD))
         if mp_result is not None and mp_result.segmentation_mask is not None:
-            raw = (mp_result.segmentation_mask > config.MASK_THRESHOLD).astype(np.uint8) * 255
+            raw = (mp_result.segmentation_mask > threshold).astype(np.uint8) * 255
         else:
             raw = np.zeros((h, w), dtype=np.uint8)
         kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
@@ -152,7 +155,7 @@ class CameraThread(threading.Thread):
             print(f"[{self.cam_name}] Camara {self.source} no disponible — simulacion")
         self._init_mediapipe()
 
-        while not self._stop.is_set():
+        while not self._stop_event.is_set():
             ts = int(time.time() * 1000)
             if use_real:
                 ok, frame_bgr = cap.read()
@@ -194,7 +197,7 @@ class CameraThread(threading.Thread):
 
             with dai.Device(pipeline) as device:
                 q = device.getOutputQueue("rgb", maxSize=4, blocking=False)
-                while not self._stop.is_set():
+                while not self._stop_event.is_set():
                     in_rgb = q.tryGet()
                     if in_rgb is None:
                         time.sleep(0.001)

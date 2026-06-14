@@ -25,6 +25,7 @@ from camera_thread import CameraThread
 from sync_manager  import SyncManager
 from osc_client    import MultiCamOSCClient
 from syphon_share  import SyphonShare
+from mcp_bridge    import start as start_mcp, get_live_params
 
 
 def compute_triple_coincidence(mask_a: np.ndarray,
@@ -86,6 +87,8 @@ def main():
     if args.simulate:
         print("[P3] Modo simulacion forzado")
 
+    start_mcp(blocking=False)
+
     # Crear hilos de cámara
     thread_a = CameraThread("A", "frontal-OAK",
                             source=None if not args.simulate else config.CAM_A_FALLBACK_IDX,
@@ -116,8 +119,11 @@ def main():
     try:
         while True:
             t_loop = time.time()
+            live_params = get_live_params()
+            sync_window_ms = int(live_params.get("sync_window_ms", config.SYNC_WINDOW_MS))
+            triple_threshold = float(live_params.get("triple_threshold", config.TRIPLE_THRESHOLD))
 
-            triplet = sync.get_sync_triplet()
+            triplet = sync.get_sync_triplet(sync_window_ms=sync_window_ms)
             if triplet is None:
                 time.sleep(0.005)
                 continue
@@ -159,11 +165,11 @@ def main():
                 ts_b   = fb.timestamp_ms
                 ts_c   = fc.timestamp_ms
                 delta  = max(ts_a, ts_b, ts_c) - min(ts_a, ts_b, ts_c)
-                label  = "TRIPLE" if triple_ratio > config.TRIPLE_THRESHOLD else (
+                label  = "TRIPLE" if triple_ratio > triple_threshold else (
                          "DOUBLE" if double_ratio > 0.05 else "      ")
                 print(
                     f"[{label}] {fps:4.1f}fps | "
-                    f"sync={delta:3d}ms ({stats['sync_ratio']*100:.0f}% OK) | "
+                    f"sync={delta:3d}/{sync_window_ms:2d}ms ({stats['sync_ratio']*100:.0f}% OK) | "
                     f"A={fa.flow_mean:.2f} B={fb.flow_mean:.2f} C={fc.flow_mean:.2f} | "
                     f"triple={triple_ratio:.4f}"
                 )
