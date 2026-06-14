@@ -168,7 +168,7 @@ def count_people(seg_mask, params):
     Devuelve (blob_count, centros) donde centros es lista de (cx, cy) normalizados.
     """
     if seg_mask is None:
-        return 1, []
+        return 0, []
 
     h, w = seg_mask.shape[:2]
     binary = (seg_mask > config.SEG_THRESHOLD).astype(np.uint8) * 255

@@ -19,6 +19,7 @@ CAM_INDEX    = 0           # VERIFICAR: índice de la cámara RGB 1080p
 FRAME_WIDTH  = 1920
 FRAME_HEIGHT = 1080
 TARGET_FPS   = 60          # C922 puede 60fps a 1080p; OAK-D Pro W también
+CAM_RETRY_SECONDS = 5.0    # reintento de apertura si la cámara se pierde en vivo
 
 # ── DeepLabv3 CoreML ──────────────────────────────────────────────────────────
 COREML_MODEL_PATH = "DeepLabV3.mlpackage"   # generado por convert_to_coreml.py

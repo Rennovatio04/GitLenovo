@@ -91,7 +91,8 @@ CameraThread (cada uno, por frame):
 
 SyncManager.get_sync_triplet():
   max(ts_a, ts_b, ts_c) - min(...) <= 33 ms → triplete validado
-  frames fuera de ventana → reutiliza frame anterior
+  frames fuera de ventana → reutiliza frame anterior solo si vuelve a entrar a ventana
+  si el delta sigue fuera de ventana → el triplete se descarta
 
 multicam_runtime.py (loop ~30fps):
   triple_ratio = coincidencia de 3 máscaras / total pixels
@@ -252,6 +253,7 @@ CameraThread("A", use_oak=True):
 SyncManager.get_sync_triplet():
   max(ts_a, ts_b, ts_c) - min(ts_a, ts_b, ts_c) <= 33ms
   → (CameraResult_A, CameraResult_B, CameraResult_C)
+  fuera de ventana persistente → None (no se compone ni se publica)
 
 multicam_runtime loop:
   triple_ratio = sum(mask_a > 0 & mask_b > 0 & mask_c > 0) / total_pixels
@@ -364,8 +366,8 @@ TouchDesigner:
 - Ejecutar prueba con 3 cámaras reales y confirmar que `sync_window_ms` reacciona
   en vivo desde MCP.
 - Verificar que el cierre del runtime termina los 3 hilos sin bloquear `join()`.
-- Medir `sync_ratio` y validar reutilización del último frame cuando una cámara se
-  sale de ventana.
+- Medir `sync_ratio` y validar que los tripletes fuera de ventana se descartan
+  en lugar de contaminar la composición.
 - Confirmar hardware Mac M3 Max, puertos TB4 dedicados y backends reales de cámara/share.
 
 ### Historial de versiones

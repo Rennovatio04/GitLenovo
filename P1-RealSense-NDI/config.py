@@ -86,3 +86,9 @@ MCP_RESPOND_PORT = 9002
 # En TouchDesigner: NDI In TOP → Source Name = JIFREX-MSI-MASK
 # Latencia en LAN gigabit: ~8 ms (1 frame más algunos ms de red).
 NDI_SOURCE_NAME = "JIFREX-MSI-MASK"
+
+# ── Robustez de captura RealSense ──────────────────────────────────────────────
+# Si wait_for_frames excede este tiempo, el runtime registra la incidencia y
+# sigue vivo para poder reconectar la cámara sin congelar el proceso.
+RS_FRAME_TIMEOUT_MS = 1000
+RS_MAX_CONSECUTIVE_FAILURES = 5

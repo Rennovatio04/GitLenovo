@@ -68,11 +68,11 @@ def onTableChange(dat):
             if top_glitch:
                 top_glitch.par.value0 = _f(dat, row, 1)  # uGlitch
 
-        elif address == '/cuerpo/metrica/motion_ratio':
+        elif address in ('/cuerpo/metrica/motion_ratio', '/cuerpo/motion_ratio'):
             if top_glitch:
                 top_glitch.par.value1 = _f(dat, row, 1)  # uMotionRatio
 
-        elif address == '/cuerpo/metrica/flow_mean':
+        elif address in ('/cuerpo/metrica/flow_mean', '/cuerpo/flow_mean'):
             if top_glitch:
                 top_glitch.par.value2 = _f(dat, row, 1)  # uFlowMean
 
@@ -82,7 +82,7 @@ def onTableChange(dat):
                 top_dual.par.value0 = _f(dat, row, 1)    # uBlobCount
 
         # ── Métricas extra para zona_hands (apertura de brazo derecho) ────────
-        elif address == '/cuerpo/metrica/arm_open_right':
+        elif address in ('/cuerpo/metrica/arm_open_right', '/cuerpo/arm_open_right'):
             if top_hands:
                 top_hands.par.value2 = _f(dat, row, 1)   # uArmOpenR
 

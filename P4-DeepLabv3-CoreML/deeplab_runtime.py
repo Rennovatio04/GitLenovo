@@ -16,7 +16,6 @@
 #   python deeplab_runtime.py --preview    # ventana de debug cv2
 # ─────────────────────────────────────────────────────────────────────────────
 
-import sys
 import time
 import argparse
 import tempfile
@@ -61,6 +60,23 @@ def write_mask_atomic(mask: np.ndarray, path: str = "latest_mask.png"):
     os.replace(tmp, out_path)
 
 
+def blank_frame_and_mask() -> tuple[np.ndarray, np.ndarray]:
+    frame = np.zeros((config.FRAME_HEIGHT, config.FRAME_WIDTH, 3), dtype=np.uint8)
+    mask = np.zeros((config.FRAME_HEIGHT, config.FRAME_WIDTH), dtype=np.uint8)
+    return frame, mask
+
+
+def open_camera():
+    cap = cv2.VideoCapture(config.CAM_INDEX)
+    if not cap.isOpened():
+        cap.release()
+        return None
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, config.FRAME_WIDTH)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, config.FRAME_HEIGHT)
+    cap.set(cv2.CAP_PROP_FPS, config.TARGET_FPS)
+    return cap
+
+
 def build_preview(frame_bgr: np.ndarray, mask: np.ndarray,
                   backend: str, fps: float, blob_area: int,
                   flow_m: float, triple: bool, coverage: float) -> np.ndarray:
@@ -97,8 +113,10 @@ def main():
 
     start_mcp(blocking=False)
 
+    simulate_mode = args.simulate
+
     segmentor = DeepLabSegmentor()
-    if args.simulate:
+    if simulate_mode:
         segmentor.backend = "simulate"
         print("[P4] Modo simulacion forzado")
 
@@ -107,16 +125,18 @@ def main():
     osc    = P4OSCClient(config.OSC_HOST, config.OSC_PORT)
     syphon = SyphonShare(config.SYPHON_SERVER_NAME)
 
-    cap = cv2.VideoCapture(config.CAM_INDEX)
-    if cap.isOpened():
-        cap.set(cv2.CAP_PROP_FRAME_WIDTH,  config.FRAME_WIDTH)
-        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, config.FRAME_HEIGHT)
-        cap.set(cv2.CAP_PROP_FPS,          config.TARGET_FPS)
+    cap = None
+    use_cam = False
+    last_cam_retry = 0.0
+
+    if not simulate_mode:
+        cap = open_camera()
+    if cap is not None:
         use_cam = True
         print(f"[P4] Camara {config.CAM_INDEX} abierta — {config.FRAME_WIDTH}x{config.FRAME_HEIGHT}")
     else:
-        use_cam = False
-        print(f"[P4] Camara {config.CAM_INDEX} no disponible — usando modelo sin frame real")
+        mode_label = "simulacion explicita" if simulate_mode else "salida vacia y reintentos"
+        print(f"[P4] Camara {config.CAM_INDEX} no disponible — {mode_label}")
 
     prev_gray = None
     cooldown  = 0
@@ -130,22 +150,39 @@ def main():
             t_loop = time.time()
 
             # ── Captura ────────────────────────────────────────────────────────
-            if use_cam:
+            capture_ok = False
+            if simulate_mode:
+                frame_bgr, mask = blank_frame_and_mask()
+                mask = segmentor._simulate(config.FRAME_HEIGHT, config.FRAME_WIDTH)
+                capture_ok = True
+            elif use_cam and cap is not None:
                 ok, frame_bgr = cap.read()
-                if not ok:
-                    frame_bgr = None
+                if ok:
+                    capture_ok = True
+                else:
+                    print("[P4] Lectura de camara fallida — emitiendo salida vacia y reintentando.")
+                    cap.release()
+                    cap = None
+                    use_cam = False
             else:
-                frame_bgr = None
+                now = time.time()
+                if now - last_cam_retry >= config.CAM_RETRY_SECONDS:
+                    last_cam_retry = now
+                    cap = open_camera()
+                    if cap is not None:
+                        use_cam = True
+                        print(f"[P4] Camara {config.CAM_INDEX} reconectada.")
+                    else:
+                        print(f"[P4] Camara {config.CAM_INDEX} sigue no disponible.")
 
             # ── Segmentación ───────────────────────────────────────────────────
             t_seg_start = time.time()
-            if frame_bgr is not None:
+            if simulate_mode:
+                pass
+            elif capture_ok:
                 mask = segmentor.segment(frame_bgr)
             else:
-                # Simulación sin frame
-                h, w = config.FRAME_HEIGHT, config.FRAME_WIDTH
-                mask = segmentor._simulate(h, w)
-                frame_bgr = np.zeros((h, w, 3), dtype=np.uint8)
+                frame_bgr, mask = blank_frame_and_mask()
             t_seg_ms = (time.time() - t_seg_start) * 1000
 
             # ── Análisis de blobs Antimodular ──────────────────────────────────
@@ -153,9 +190,13 @@ def main():
 
             # ── Optical Flow ───────────────────────────────────────────────────
             gray = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2GRAY)
-            if prev_gray is None:
+            if not capture_ok and not simulate_mode:
+                prev_gray = None
+                flow_mean = 0.0
+                motion_ratio = 0.0
+            elif prev_gray is None:
                 prev_gray = gray
-                flow_mean    = 0.0
+                flow_mean = 0.0
                 motion_ratio = 0.0
             else:
                 flow_mean, motion_ratio = optical_flow(prev_gray, gray)
@@ -233,7 +274,7 @@ def main():
     except KeyboardInterrupt:
         print("\n[P4] Deteniendo...")
     finally:
-        if cap.isOpened():
+        if cap is not None and cap.isOpened():
             cap.release()
         syphon.close()
         if args.preview:

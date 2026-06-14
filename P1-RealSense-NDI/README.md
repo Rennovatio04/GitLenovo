@@ -245,7 +245,9 @@ RealSense D435i (depth z16 + color BGR8 @ 1280×720 @ 30fps)
 4. **`feedback_particles.glsl` línea 75**: Decay = 0.96 → después de 1 s (30 frames): `0.96^30 = 0.294`. La estela debería ser visible ~2.5 s. Ajustar si la galería tiene mucha luz ambiental.
 5. **`webcam_runtime.py` función `segment()`**: El umbral adaptativo asume un rango de profundidad 300-3000 mm. Si la sala es más pequeña o más grande, ajustar `DEPTH_MIN_MM` / `DEPTH_MAX_MM` en `config.py`.
 6. **Thread safety**: `mcp_bridge._params` usa `threading.Lock()`. `webcam_runtime` llama `get_live_params()` cada frame — verificar que no haya contención en producción.
-7. **Memory**: El loop de RealSense llama `pipeline.wait_for_frames()` que bloquea hasta 5 s por defecto. Si la cámara se desconecta, el proceso se congela (no hay timeout configurado).
+7. **RealSense timeout**: El runtime usa timeout explícito y reintenta levantar el
+   pipeline si acumula fallos consecutivos. Verificar en el log que una
+   desconexión temporal no congele el proceso.
 
 ### Auditoría y mejoras — 2026-06-14
 
@@ -275,6 +277,8 @@ RealSense D435i (depth z16 + color BGR8 @ 1280×720 @ 30fps)
 - Repetir prueba de runtime con bridge embebido y bridge externo para validar la
   tolerancia a puerto ocupado.
 - Revisar riesgos abiertos: reconexión de red y prueba continua de 8 horas.
+- Desconectar y reconectar la RealSense para confirmar que el runtime se
+  recupera sin congelarse.
 
 ### Historial de versiones
 

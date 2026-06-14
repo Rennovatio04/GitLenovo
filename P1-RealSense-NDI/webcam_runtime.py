@@ -18,10 +18,8 @@ Pipeline por frame:
 """
 
 import os
-import sys
 import time
 import tempfile
-import threading
 
 import cv2
 import numpy as np
@@ -63,11 +61,17 @@ def build_realsense_pipeline():
 
 
 def get_realsense_frames(pipeline, align):
-    frames       = pipeline.wait_for_frames()
-    aligned      = align.process(frames)
-    depth_frame  = aligned.get_depth_frame()
-    color_frame  = aligned.get_color_frame()
+    try:
+        frames = pipeline.wait_for_frames(timeout_ms=config.RS_FRAME_TIMEOUT_MS)
+    except RuntimeError as exc:
+        print(f"[RS] Timeout o desconexion de camara: {exc}")
+        return None, None
+
+    aligned = align.process(frames)
+    depth_frame = aligned.get_depth_frame()
+    color_frame = aligned.get_color_frame()
     if not depth_frame or not color_frame:
+        print("[RS] Frame incompleto recibido; reintentando.")
         return None, None
     depth_img = np.asanyarray(depth_frame.get_data())
     color_img = np.asanyarray(color_frame.get_data())
@@ -143,6 +147,18 @@ def write_mask_atomic(mask: np.ndarray):
     os.replace(tmp_path, mask_path)
 
 
+def restart_realsense_pipeline(pipeline):
+    try:
+        pipeline.stop()
+    except RuntimeError:
+        pass
+    try:
+        return build_realsense_pipeline()
+    except RuntimeError as exc:
+        print(f"[RS] No se pudo reiniciar la RealSense: {exc}")
+        return None, None
+
+
 # ── Loop principal ────────────────────────────────────────────────────────────
 
 def main():
@@ -162,15 +178,21 @@ def main():
     if sim_mode:
         cap = build_sim_pipeline()
     else:
-        pipeline, align = build_realsense_pipeline()
+        try:
+            pipeline, align = build_realsense_pipeline()
+        except RuntimeError as exc:
+            print(f"[RS] No se pudo inicializar la RealSense ({exc}) — modo simulacion.")
+            sim_mode = True
+            cap = build_sim_pipeline()
 
     osc = OSCClient()
     ndi = NDIStream()
 
-    prev_gray   = None
-    cooldown    = 0
+    prev_gray = None
+    cooldown = 0
     frame_count = 0
-    t_start     = time.perf_counter()
+    t_start = time.perf_counter()
+    capture_failures = 0
 
     try:
         while True:
@@ -181,7 +203,17 @@ def main():
                 depth_img, color_img = get_realsense_frames(pipeline, align)
 
             if depth_img is None:
+                prev_gray = None
+                if not sim_mode:
+                    capture_failures += 1
+                    if capture_failures >= config.RS_MAX_CONSECUTIVE_FAILURES:
+                        print("[RS] Reintentando inicializar pipeline RealSense...")
+                        new_pipeline, new_align = restart_realsense_pipeline(pipeline)
+                        capture_failures = 0
+                        if new_pipeline is not None and new_align is not None:
+                            pipeline, align = new_pipeline, new_align
                 continue
+            capture_failures = 0
 
             # 2-3. Segmentación
             params = get_live_params()   # parámetros vivos del MCP bridge
@@ -242,7 +274,10 @@ def main():
         if sim_mode:
             cap.release()
         else:
-            pipeline.stop()
+            try:
+                pipeline.stop()
+            except RuntimeError:
+                pass
         ndi.destroy()
 
 

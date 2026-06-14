@@ -67,10 +67,10 @@ class SyncManager:
         if delta <= window:
             self._validated = list(selected)
             self._in_sync += 1
-        else:
-            self._out_of_sync += 1
+            return (selected[0], selected[1], selected[2])
 
-        return (selected[0], selected[1], selected[2])
+        self._out_of_sync += 1
+        return None
 
     def stats(self) -> dict:
         """Estadísticas de sincronización para logging."""

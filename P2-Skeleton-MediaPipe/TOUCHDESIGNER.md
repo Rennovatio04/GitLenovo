@@ -118,7 +118,7 @@ angular — tres valores en un mismo mensaje.
    - **Port**: `9000`
    - **Local Address**: dejar vacío (escucha en todas las interfaces — loopback incluido)
    - **Active**: ON
-4. **Verificar:** la tabla debe mostrar rutas como `/cuerpo/trigger_zona`, `/cuerpo/flow_mean`,
+4. **Verificar:** la tabla debe mostrar rutas como `/cuerpo/trigger_zona`, `/cuerpo/metrica/flow_mean`,
    `/cuerpo/cadera`, etc. Si la tabla está vacía y Python está corriendo, verificar que
    `OSC_HOST = "127.0.0.1"` en `config.py` (misma máquina).
 

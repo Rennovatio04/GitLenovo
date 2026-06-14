@@ -70,14 +70,19 @@ class OSCClient:
     # ── Métricas continuas (alimentan los uniforms de los shaders) ────────────
     def send_metrics(self, m: dict, flow_mean: float, motion_ratio: float):
         """Envía las métricas continuas que los shaders usan como uniforms."""
-        self._client.send_message(config.OSC_HIP_ANGLE,      float(m["hip_angle"]))
-        self._client.send_message(config.OSC_HIP_VELOCITY,   float(m["hip_velocity"]))
-        self._client.send_message(config.OSC_HEAD_ROLL,      float(m["head_roll"]))
-        self._client.send_message(config.OSC_HEAD_PITCH,     float(m["head_pitch"]))
-        self._client.send_message(config.OSC_ARM_OPEN_LEFT,  float(m["arm_open_l"]))
-        self._client.send_message(config.OSC_ARM_OPEN_RIGHT, float(m["arm_open_r"]))
-        self._client.send_message(config.OSC_FLOW_MEAN,      float(flow_mean))
-        self._client.send_message(config.OSC_MOTION_RATIO,   float(motion_ratio))
+        metrics = (
+            ((config.OSC_HIP_ANGLE, config.OSC_HIP_ANGLE_LEGACY), float(m["hip_angle"])),
+            ((config.OSC_HIP_VELOCITY, config.OSC_HIP_VELOCITY_LEGACY), float(m["hip_velocity"])),
+            ((config.OSC_HEAD_ROLL, config.OSC_HEAD_ROLL_LEGACY), float(m["head_roll"])),
+            ((config.OSC_HEAD_PITCH, config.OSC_HEAD_PITCH_LEGACY), float(m["head_pitch"])),
+            ((config.OSC_ARM_OPEN_LEFT, config.OSC_ARM_OPEN_LEFT_LEGACY), float(m["arm_open_l"])),
+            ((config.OSC_ARM_OPEN_RIGHT, config.OSC_ARM_OPEN_RIGHT_LEGACY), float(m["arm_open_r"])),
+            ((config.OSC_FLOW_MEAN, config.OSC_FLOW_MEAN_LEGACY), float(flow_mean)),
+            ((config.OSC_MOTION_RATIO, config.OSC_MOTION_RATIO_LEGACY), float(motion_ratio)),
+        )
+        for addresses, value in metrics:
+            for address in addresses:
+                self._client.send_message(address, value)
 
     # ── Envío completo por frame (conveniencia) ───────────────────────────────
     def send_frame(self, m: dict, flow_mean: float, motion_ratio: float,

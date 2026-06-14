@@ -318,8 +318,8 @@ cv2.VideoCapture(CAM_INDEX) @ 1920×1080 / 60fps
 
 ### Qué debe verificar un auditor
 
-1. **`DeepLabV3.mlpackage` existe**: sin este archivo, el sistema cae a simulación. Verificar con `python3 -c "import os; print(os.path.exists('DeepLabV3.mlpackage'))"`.
-2. **Backend activo**: el log de arranque debe mostrar `Backend: CoreML`. Si muestra `tensorflow` o `simulate`, el mlpackage no se encontró.
+1. **`DeepLabV3.mlpackage` existe**: sin este archivo, el sistema solo puede entrar a simulación explícita (`--simulate`). Verificar con `python3 -c "import os; print(os.path.exists('DeepLabV3.mlpackage'))"`.
+2. **Backend activo**: el log de arranque debe mostrar `Backend: CoreML`. Si muestra `tensorflow` o `simulate`, el mlpackage no se encontró o se forzó la simulación.
 3. **Latencia de segmentación**: el log muestra `coreml XYms`. Debe ser 15–25. Si es > 40 ms, CoreML está usando CPU en lugar de Neural Engine — verificar `compute_units=ct.ComputeUnit.ALL` en la conversión.
 4. **`config.py` OSC_HOST**: si TouchDesigner corre en el mismo Mac, usar `"127.0.0.1"`. Si corre en otra máquina, usar la IP real.
 5. **Nombres de ops en TD**: `glsl_halo`, `glsl_glitch`, `glsl_particles` deben coincidir exactamente (`td_osc_to_uniforms.py` líneas 10-12).
@@ -328,6 +328,8 @@ cv2.VideoCapture(CAM_INDEX) @ 1920×1080 / 60fps
 8. **flow_threshold = 0.35** (más bajo que P1/0.50): este valor asume que DeepLabv3 no genera jitter. Si el log muestra triggers frecuentes en reposo, subir a 0.45 vía MCP bridge.
 9. **Morphology kernel 3×3** (vs 5×5 en P1): DeepLabv3 ya produce bordes limpios — un kernel más pequeño preserva el detalle de extremidades. No aumentar salvo que haya mucho ruido de fondo.
 10. **syphon-python**: sin esta lib, la textura no llega a TD. El OSC sí funciona. Verificar con `python3 -c "import syphon; print(syphon.SyphonServer.__module__)"`.
+11. **Fallo de cámara**: sin `--simulate`, un `cap.read()` fallido debe producir
+    máscara vacía y reintentos de reconexión, nunca una silueta sintética.
 
 ### Auditoría y mejoras — 2026-06-14
 

@@ -117,6 +117,16 @@ OSC_ARM_OPEN_LEFT   = "/cuerpo/metrica/arm_open_left"
 OSC_ARM_OPEN_RIGHT  = "/cuerpo/metrica/arm_open_right"
 OSC_FLOW_MEAN       = "/cuerpo/metrica/flow_mean"
 OSC_MOTION_RATIO    = "/cuerpo/metrica/motion_ratio"
+
+# Compatibilidad con documentación y patches antiguos de TouchDesigner.
+OSC_HIP_ANGLE_LEGACY      = "/cuerpo/hip_angle"
+OSC_HIP_VELOCITY_LEGACY   = "/cuerpo/hip_velocity"
+OSC_HEAD_ROLL_LEGACY      = "/cuerpo/head_roll"
+OSC_HEAD_PITCH_LEGACY     = "/cuerpo/head_pitch"
+OSC_ARM_OPEN_LEFT_LEGACY  = "/cuerpo/arm_open_left"
+OSC_ARM_OPEN_RIGHT_LEGACY = "/cuerpo/arm_open_right"
+OSC_FLOW_MEAN_LEGACY      = "/cuerpo/flow_mean"
+OSC_MOTION_RATIO_LEGACY   = "/cuerpo/motion_ratio"
 OSC_GLOBAL_GLITCH   = "/cuerpo/global/glitch"     # trigger 4 (0/1)
 
 # ── MCP bridge (ajuste de umbrales en vivo, sin reiniciar) ────────────────────

@@ -14,7 +14,7 @@ Galería Universitaria Fernando Cano · UAEMEx / FUNIBER
 | Fase 1 — Ecosistema | ✅ Completa | venv, `config.py` centralizado, `mcp_bridge` |
 | Fase 2 — Lógica semántica | ✅ Completa | MediaPipe Holistic → 17 joints → 6 triggers semánticos |
 | Fase 3 — Shaders GLSL | ✅ Completa | 5 shaders por zona + Script DAT + setup TD |
-| Detección 2 personas | ✅ Completa | `blob_count` vía máscara de segmentación + 2 centros de masa |
+| Detección 2 personas | ⚠️ Experimental | `blob_count` vía máscara de segmentación; requiere validar con 2 siluetas reales |
 | GPU share (Spout/Syphon) | ⚠️ Parcial | Código listo, degrada a no-op si falta la lib nativa |
 | Calibración en sala | ❌ Pendiente | Umbrales por defecto · requiere visita técnica |
 | Prueba 8 h continuas | ❌ Pendiente | Sin test de estabilidad larga |
@@ -28,8 +28,9 @@ Galería Universitaria Fernando Cano · UAEMEx / FUNIBER
   codos, muñecas, caderas, rodillas) — ver `config.LM`
 - **Cálculo de ángulos con `arctan2`** en `zone_detector.py` (cadera, cabeza, brazos)
 - **6 triggers semánticos** completos (ver tabla abajo), cada uno con su cooldown
-- **Detección de 2 personas**: máscara de segmentación de MediaPipe → blobs →
-  verificación de dos centros de masa separados (`blob_count`)
+- **Detección experimental de 2 personas**: máscara de segmentación de
+  MediaPipe → blobs → verificación de dos centros de masa separados
+  (`blob_count`). Si no hay máscara válida, el runtime publica `0`.
 - **OSC semántico** a TouchDesigner: rutas `/cuerpo/...` (qué parte se mueve, qué
   zona disparó, blob_count) + métricas continuas (ángulos, velocidades)
 - **Spout (Windows) / Syphon (macOS)**: comparte el overlay del esqueleto GPU→GPU
@@ -68,7 +69,7 @@ Galería Universitaria Fernando Cano · UAEMEx / FUNIBER
 | 3 | Inclinación de cabeza | Cambio de paleta de color completa (temperatura por roll/pitch) | `atan2(nose.y - ear.y, nose.x - ear.x)` | `zona_head.glsl` |
 | 4 | Salto / movimiento brusco | Glitch + partículas máximas | `motion_ratio > 0.7` | `global_glitch.glsl` |
 | 5 | Pose estática > 3 s | Fade gradual → reposo | `flow_mean < 0.5` durante 90 frames | Level TOP (ver setup TD) |
-| 6 | 2 personas simultáneas | Diálogo cubista entre cuerpos *(exclusivo P2)* | `blob_count > 1` + dos centros de masa | `dual_body.glsl` |
+| 6 | 2 siluetas simultáneas | Diálogo cubista entre cuerpos *(exclusivo P2)* | `blob_count > 1` + dos centros de masa | `dual_body.glsl` |
 
 La zona dominante de cada frame se publica en `/cuerpo/trigger_zona`
 (`zona_hands`, `zona_torso`, `zona_head`, `global`, `pose_estatica`, `none`).
@@ -291,11 +292,11 @@ Webcam 1080p (Logitech C922 / simulada)  @30fps
       └─ OSCClient.send_semantic():
            /cuerpo/trigger_zona  (string: zona activa)
            /cuerpo/blob_count    (int)
-           /cuerpo/flow_mean     (float)
-           /cuerpo/motion_ratio  (float)
-           /cuerpo/hip_angle     (float, grados)
-           /cuerpo/head_roll     (float, grados)
-           /cuerpo/head_pitch    (float, grados)
+           /cuerpo/metrica/flow_mean     (float)
+           /cuerpo/metrica/motion_ratio  (float)
+           /cuerpo/metrica/hip_angle     (float, grados)
+           /cuerpo/metrica/head_roll     (float, grados)
+           /cuerpo/metrica/head_pitch    (float, grados)
            /cuerpo/pose_estatica (float: segundos de quietud)
       └─ FrameShare.send(overlay_bgra):
            Windows → Spout (SpoutGL) ~1ms GPU→GPU
@@ -323,12 +324,15 @@ Cada landmark tiene `(x, y, z, visibility)`. El detector filtra joints con `visi
 |----------|------|-------|-------------|
 | `/cuerpo/trigger_zona` | string | zona_hands, zona_torso, zona_head, global, pose_estatica, none | Zona dominante del frame |
 | `/cuerpo/blob_count` | int | 0–2+ | Personas detectadas |
-| `/cuerpo/flow_mean` | float | 0.0–3.0 | Magnitud promedio del flujo óptico |
-| `/cuerpo/motion_ratio` | float | 0.0–1.0 | Fracción de píxeles con movimiento > 1px |
-| `/cuerpo/hip_angle` | float | -180.0–180.0 | Ángulo relativo de cadera (arctan2) |
-| `/cuerpo/head_roll` | float | -90.0–90.0 | Inclinación lateral de cabeza |
-| `/cuerpo/head_pitch` | float | -90.0–90.0 | Inclinación frontal de cabeza |
+| `/cuerpo/metrica/flow_mean` | float | 0.0–3.0 | Magnitud promedio del flujo óptico |
+| `/cuerpo/metrica/motion_ratio` | float | 0.0–1.0 | Fracción de píxeles con movimiento > 1px |
+| `/cuerpo/metrica/hip_angle` | float | -180.0–180.0 | Ángulo relativo de cadera (arctan2) |
+| `/cuerpo/metrica/head_roll` | float | -90.0–90.0 | Inclinación lateral de cabeza |
+| `/cuerpo/metrica/head_pitch` | float | -90.0–90.0 | Inclinación frontal de cabeza |
 | `/cuerpo/pose_estatica` | float | 0.0–N | Segundos de quietud acumulada |
+
+Las rutas históricas sin el prefijo `/metrica/` siguen emitiéndose como alias de
+compatibilidad para patches de TouchDesigner anteriores.
 
 ### Puntos de integración críticos
 
